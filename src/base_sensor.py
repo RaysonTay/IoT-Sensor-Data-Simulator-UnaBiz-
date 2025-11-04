@@ -7,23 +7,24 @@ def generate_random_devEUI():
     return ''.join(random.choice('0123456789abcdef') for _ in range(16))
 
 class BaseSensor:
-    def __init__(self, type, devEUI=None, battery=100, seqNumber=0, seed=None, frequency=300, noise_level=0.0):
+    def __init__(self, type, devEUI=None, battery=100, seqNumber=0, seed=None, frequency=300, noise_level=0.0, anomaly_rate=0.01):
         self.type = type
         self.devEUI = devEUI if devEUI else generate_random_devEUI()
         self.battery = battery
         self.seqNumber = seqNumber
         self.frequency = frequency # default 5min = 300s
         self.noise_level = noise_level
+        self.anomaly_rate = anomaly_rate
         if seed is not None:
             np.random.seed(seed)
     
     def _random_rssi(self, anomaly=False):
-        if anomaly and np.random.random() < 0.01:   # 1% chance anomaly
+        if np.random.random() < self.anomaly_rate:
             return np.random.uniform(-80, -60)
         return np.random.normal(-25, 5) # mean -25dBm, stddev 5dBm (from real data)
 
     def _random_snr(self, anomaly=False):
-        if anomaly and np.random.random() < 0.01:
+        if np.random.random() < self.anomaly_rate:
             return np.random.uniform(-10, 0)
         return np.random.normal(13.5, 1.5) # mean 13.5dB, stddev 1.5dB (from real data)
 
@@ -36,7 +37,6 @@ class BaseSensor:
 
     def generate_data(self, duration_minutes=60, start_time=None):
         # generate time-series data for the given duration.
-        # Returns pd.DataFrame with columns: ['timestamp', 'sensor_type', 'value']
         if start_time is None:
             start_time = datetime.now() # defaults to now
 
@@ -45,14 +45,13 @@ class BaseSensor:
         readings = []
         for t in range(num_points):
             val = self.generate_reading(t)
-            anomaly_flag = np.random.random() < 0.01  # 1% chance of rssi/snr anomaly
             record = {
                 "timestamp": timestamps[t],
                 "sensor_type": self.type,
                 "devEUI": self.devEUI,
                 "battery": self.battery,
-                "rssi": round(self._random_rssi(anomaly_flag), 1),
-                "snr": round(self._random_snr(anomaly_flag), 1),
+                "rssi": round(self._random_rssi(), 1),
+                "snr": round(self._random_snr(), 1),
                 "seqNumber": self.seqNumber,
                 "value": val
             }
