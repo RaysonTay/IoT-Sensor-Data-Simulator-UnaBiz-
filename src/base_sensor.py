@@ -1,18 +1,30 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+import random
+
+def generate_random_devEUI():
+    return ''.join(random.choice('0123456789abcdef') for _ in range(16))
 
 class BaseSensor:
-    def __init__(self, type, devEUI, rssi, seqnumber, snr, seed, frequency=15, noise_level=0.0):
+    def __init__(self, type, devEUI=None, battery=100, seqNumber=0, seed=None, frequency=900, noise_level=0.0):
         self.type = type
-        self.devEUI = devEUI
-        self.rssi = rssi
-        self.seqNumber = seqnumber
-        self.snr = snr
-        self.frequency = frequency
+        self.devEUI = devEUI if devEUI else generate_random_devEUI()
+        self.battery = battery
+        self.seqNumber = seqNumber
+        self.frequency = frequency # default 5min = 900s
         self.noise_level = noise_level
         if seed is not None:
             np.random.seed(seed)
+    
+    def _random_rssi(self):
+        return np.random.uniform(-110, -40)
+
+    def _random_snr(self):
+        return np.random.uniform(-10, 15)
+
+    def _increment_seq(self):
+        self.seqNumber = (self.seqNumber + 1) % 65536
 
     def generate_reading(self, t):
         # to be overidden
@@ -20,7 +32,7 @@ class BaseSensor:
 
     def generate_data(self, duration_minutes=60, start_time=None):
         # generate time-series data for the given duration.
-        # Returns pd.DataFrame with columns: ['timestamp', 'sensor_id', 'value']
+        # Returns pd.DataFrame with columns: ['timestamp', 'sensor_type', 'value']
         if start_time is None:
             start_time = datetime.now() # defaults to now
 
@@ -35,6 +47,6 @@ class BaseSensor:
 
         return pd.DataFrame({
             "timestamp": timestamps,
-            "sensor_name": self.type,
+            "sensor_type": self.type,
             "value": values
         })
