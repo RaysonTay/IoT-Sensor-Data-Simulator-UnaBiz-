@@ -1,0 +1,162 @@
+# ======================================================
+# UnaBiz IoT Sensor Dashboard
+# Compatible with both simulated and real sensor data
+# ======================================================
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import os
+
+st.set_page_config(page_title="IoT Sensor Dashboard", layout="wide")
+
+# --------------------------
+# 1. Sidebar / Controls
+# --------------------------
+st.sidebar.title("⚙️ Controls")
+
+# Load available datasets
+output_dir = "src/outputs"
+os.makedirs(output_dir, exist_ok=True)
+
+available_files = [f for f in os.listdir(output_dir) if f.endswith(".csv")]
+
+if not available_files:
+    st.sidebar.warning("No CSV files found in src/outputs. Run simulator first.")
+    st.stop()
+
+selected_file = st.sidebar.selectbox("Select dataset", available_files)
+file_path = os.path.join(output_dir, selected_file)
+
+# Read and clean data
+df = pd.read_csv(file_path)
+df["timestamp"] = pd.to_datetime(df["timestamp"])
+df.sort_values("timestamp", inplace=True)
+
+# Sensor selection (if multiple types exist)
+sensor_types = sorted(df["sensor_type"].dropna().unique())
+selected_sensors = st.sidebar.multiselect("Select sensors", sensor_types, default=sensor_types)
+
+# Date filter
+min_date = pd.to_datetime(df["timestamp"].min()).to_pydatetime()
+max_date = pd.to_datetime(df["timestamp"].max()).to_pydatetime()
+
+date_range = st.sidebar.slider(
+    "Select time range",
+    min_value=min_date,
+    max_value=max_date,
+    value=(min_date, max_date),
+    format="YYYY-MM-DD HH:mm"
+)
+
+# Filter dataframe
+df = df[(df["timestamp"] >= date_range[0]) & (df["timestamp"] <= date_range[1])]
+
+
+# Filter by sensor type
+df = df[df["sensor_type"].isin(selected_sensors)]
+
+st.sidebar.markdown("---")
+show_anomalies = st.sidebar.checkbox("Highlight anomalies (>100 NH3 ppm or >10 occupancy change)", True)
+
+# --------------------------
+# 2. Main Layout
+# --------------------------
+st.title("📊 UnaBiz IoT Sensor Dashboard")
+st.markdown(
+    "This dashboard visualizes IoT sensor data generated from the Sensor Data Simulator "
+    "or real UnaBiz deployments. It supports multiple sensor types and realistic anomaly detection."
+)
+
+tab1, tab2, tab3, tab4 = st.tabs(["🌐 Overview", "🧍 People Counter", "🧪 Ammonia", "📶 Network Health"])
+
+# ======================================================
+# 🌐 Overview Tab
+# ======================================================
+with tab1:
+    st.subheader("System Overview")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Readings", f"{len(df):,}")
+    col2.metric("Active Sensors", f"{len(sensor_types)}")
+    col3.metric("Average RSSI", f"{df['rssi'].mean():.1f} dBm" if 'rssi' in df else "—")
+    col4.metric("Average Battery", f"{df['battery'].mean():.1f}%" if 'battery' in df else "—")
+
+    if "nh3" in df.columns:
+        fig_nh3 = px.line(df, x="timestamp", y="nh3", color="sensor_type",
+                          title="Ammonia (NH₃) Levels Over Time")
+        if show_anomalies:
+            df_spikes = df[df["nh3"] > 100]
+            fig_nh3.add_scatter(x=df_spikes["timestamp"], y=df_spikes["nh3"],
+                                mode="markers", marker=dict(color="red", size=8), name="Anomalies")
+        st.plotly_chart(fig_nh3, use_container_width=True)
+
+    if "current_occupancy" in df.columns:
+        fig_occ = px.line(df, x="timestamp", y="current_occupancy", color="sensor_type",
+                          title="Occupancy Over Time")
+        st.plotly_chart(fig_occ, use_container_width=True)
+
+# ======================================================
+# 🧍 People Counter Tab
+# ======================================================
+with tab2:
+    st.subheader("People Counter Metrics")
+    pc_df = df[df["sensor_type"].str.contains("people_counter", na=False)]
+
+    if not pc_df.empty:
+        col1, col2 = st.columns(2)
+        col1.metric("Average Inflow", int(pc_df["period_in"].mean()))
+        col2.metric("Average Outflow", int(pc_df["period_out"].mean()))
+
+        fig_inout = px.bar(pc_df, x="timestamp", y=["period_in", "period_out"],
+                           title="People Flow (In/Out)", barmode="group")
+        st.plotly_chart(fig_inout, use_container_width=True)
+
+        fig_occ2 = px.line(pc_df, x="timestamp", y="current_occupancy",
+                           title="Occupancy Over Time")
+        st.plotly_chart(fig_occ2, use_container_width=True)
+    else:
+        st.info("No people counter data available in this dataset.")
+
+# ======================================================
+# 🧪 Ammonia Sensor Tab
+# ======================================================
+with tab3:
+    st.subheader("Ammonia Sensor Metrics")
+    nh3_df = df[df["sensor_type"].str.contains("ammonia", na=False)]
+
+    if not nh3_df.empty:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Average NH₃", f"{nh3_df['nh3'].mean():.2f} ppm")
+        col2.metric("Average Temp", f"{nh3_df['temperature'].mean():.1f} °C")
+        col3.metric("Average Humidity", f"{nh3_df['humidity'].mean():.1f} %")
+
+        fig_nh3_2 = px.line(nh3_df, x="timestamp", y="nh3", title="NH₃ Concentration Over Time")
+        st.plotly_chart(fig_nh3_2, use_container_width=True)
+
+        fig_temp = px.line(nh3_df, x="timestamp", y=["temperature", "humidity"],
+                           title="Temperature and Humidity Trends")
+        st.plotly_chart(fig_temp, use_container_width=True)
+    else:
+        st.info("No ammonia sensor data available in this dataset.")
+
+# ======================================================
+# 📶 Network Health Tab
+# ======================================================
+with tab4:
+    st.subheader("Network & Device Health")
+
+    if "rssi" in df.columns:
+        fig_rssi = px.line(df, x="timestamp", y="rssi", color="sensor_type", title="RSSI Signal Strength")
+        st.plotly_chart(fig_rssi, use_container_width=True)
+
+    if "snr" in df.columns:
+        fig_snr = px.line(df, x="timestamp", y="snr", color="sensor_type", title="SNR Levels")
+        st.plotly_chart(fig_snr, use_container_width=True)
+
+    if "battery" in df.columns:
+        fig_batt = px.line(df, x="timestamp", y="battery", color="sensor_type", title="Battery Drain Over Time")
+        st.plotly_chart(fig_batt, use_container_width=True)
+
+st.markdown("---")
+st.caption("© 2025 UnaBiz Internship Project — Sensor Data Simulator Dashboard by Caylee")
