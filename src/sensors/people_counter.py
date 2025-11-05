@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from src.base_sensor import BaseSensor
+from base_sensor import BaseSensor
 
 class PeopleCounterSensor(BaseSensor):
 
@@ -9,14 +9,6 @@ class PeopleCounterSensor(BaseSensor):
                  frequency=300, noise_level=0.5, anomaly_rate=0.01,
                  location="toilet", seed=None):
         # location: 'toilet'(default), 'restaurant', 'mall', or 'classroom'
-
-        self.cooldown_counter = 0  # for idle intervals
-        self.activity_prob = {
-            "toilet": 0.4,      # 40% chance of active period
-            "restaurant": 0.6,  # more frequent activity
-            "mall": 0.8,        # almost always active
-            "classroom": 0.3    # short bursts, long idle gaps
-        }.get(self.location, 0.5)
 
         super().__init__(
             type=f"people_counter_{location}",
@@ -38,6 +30,14 @@ class PeopleCounterSensor(BaseSensor):
             "mall": 200,
             "classroom": 30
         }.get(self.location, 10)
+
+        self.cooldown_counter = 0  # for idle intervals
+        self.activity_prob = {
+            "toilet": 0.4,      # 40% chance of active period
+            "restaurant": 0.6,  # more frequent activity
+            "mall": 0.8,        # almost always active
+            "classroom": 0.3    # short bursts, long idle gaps
+        }.get(self.location, 0.5)
 
     def _get_time_period(self, hour):
         if 6 <= hour < 9:
