@@ -2,7 +2,7 @@ from src.sensors.people_counter import PeopleCounterSensor
 
 def main():
     # Test the sensor for each location type
-    for loc in ["toilet", "restaurant", "mall", "classroom"]:
+    for loc in ["toilet"]:
         print(f"\n--- Simulating {loc.upper()} ---")
         
         # Create one sensor instance per location

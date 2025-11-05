@@ -92,14 +92,13 @@ class PeopleCounterSensor(BaseSensor):
             period_in = max(0, np.random.poisson(self._people_flow_pattern(hour)))
             period_out = max(0, np.random.poisson(self._people_flow_pattern(hour)))
 
-            # small Gaussian noise
-            period_in += np.random.normal(0, self.noise_level)
-            period_out += np.random.normal(0, self.noise_level)
+            period_in = max(0, int(round(period_in + np.random.normal(0, self.noise_level))))
+            period_out = max(0, int(round(period_out + np.random.normal(0, self.noise_level))))
 
             # anomalies
             if np.random.random() < self.anomaly_rate:
                 anomaly_triggered = True
-                anomaly_type = np.random.choice(["spike", "zero", "missing"])
+                anomaly_type = np.random.choice(["spike", "zero"])
                 if anomaly_type == "spike":
                     multiplier = {
                         "toilet": 5,
@@ -107,12 +106,12 @@ class PeopleCounterSensor(BaseSensor):
                         "mall": 2,
                         "classroom": 4
                     }[self.location]
-                    period_in *= np.random.uniform(multiplier / 2, multiplier)
-                    period_out *= np.random.uniform(multiplier / 2, multiplier)
-                elif anomaly_type == "zero":
+                    lam_in = max(1, self._people_flow_pattern(hour) * np.random.uniform(multiplier/2, multiplier))
+                    lam_out = max(1, self._people_flow_pattern(hour) * np.random.uniform(multiplier/2, multiplier))
+                    period_in = np.random.poisson(lam_in)
+                    period_out = np.random.poisson(lam_out)
+                else: # zero
                     period_in, period_out = 0, 0
-                elif anomaly_type == "missing":
-                    period_in, period_out = np.nan, np.nan
 
             # prevent out > current occupancy unless anomaly
             if not anomaly_triggered and not np.isnan(period_out):
@@ -131,9 +130,9 @@ class PeopleCounterSensor(BaseSensor):
                 "rssi": round(self._random_rssi(), 1),
                 "snr": round(self._random_snr(), 1),
                 "seqNumber": self.seqNumber,
-                "period_in": round(period_in, 1) if not np.isnan(period_in) else np.nan,
-                "period_out": round(period_out, 1) if not np.isnan(period_out) else np.nan,
-                "current_occupancy": round(self.current_occupancy, 1),
+                "period_in": int(period_in) if not np.isnan(period_in) else np.nan,
+                "period_out": int(period_out) if not np.isnan(period_out) else np.nan,
+                "current_occupancy": int(self.current_occupancy),
                 "location": self.location
             }
             self._increment_seq()
