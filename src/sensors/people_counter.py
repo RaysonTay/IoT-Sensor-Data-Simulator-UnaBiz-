@@ -10,6 +10,14 @@ class PeopleCounterSensor(BaseSensor):
                  location="toilet", seed=None):
         # location: 'toilet'(default), 'restaurant', 'mall', or 'classroom'
 
+        self.cooldown_counter = 0  # for idle intervals
+        self.activity_prob = {
+            "toilet": 0.4,      # 40% chance of active period
+            "restaurant": 0.6,  # more frequent activity
+            "mall": 0.8,        # almost always active
+            "classroom": 0.3    # short bursts, long idle gaps
+        }.get(self.location, 0.5)
+
         super().__init__(
             type=f"people_counter_{location}",
             devEUI=devEUI,
@@ -88,9 +96,22 @@ class PeopleCounterSensor(BaseSensor):
         for ts in timestamps:
             hour = ts.hour
             anomaly_triggered = False
-
-            period_in = max(0, np.random.poisson(self._people_flow_pattern(hour)))
-            period_out = max(0, np.random.poisson(self._people_flow_pattern(hour)))
+            
+            # burst activity logic
+            if self.cooldown_counter > 0:
+                period_in = period_out = 0
+                self.cooldown_counter -= 1
+            else:
+                if np.random.random() < self.activity_prob:
+                    # active; generate normally
+                    period_in = np.random.poisson(self._people_flow_pattern(hour))
+                    period_out = np.random.poisson(self._people_flow_pattern(hour))
+                else:
+                    # inactivity
+                    self.cooldown_counter = np.random.randint(2, 6)  # 2–5 intervals of no movement
+                    period_in = period_out = 0
+            period_in = max(0, period_in)
+            period_out = max(0, period_out)
 
             period_in = max(0, int(round(period_in + np.random.normal(0, self.noise_level))))
             period_out = max(0, int(round(period_out + np.random.normal(0, self.noise_level))))
