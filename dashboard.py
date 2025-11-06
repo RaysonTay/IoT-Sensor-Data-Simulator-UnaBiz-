@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+from simulator import Simulator
+
 
 st.set_page_config(page_title="IoT Sensor Dashboard", layout="wide")
 
@@ -11,41 +13,52 @@ st.set_page_config(page_title="IoT Sensor Dashboard", layout="wide")
 st.sidebar.title("Controls")
 
 # Load available datasets
-output_dir = "src/outputs"
+output_dir = "outputs"
 os.makedirs(output_dir, exist_ok=True)
 
-available_files = [f for f in os.listdir(output_dir) if f.endswith(".csv")]
+location = st.sidebar.selectbox(
+    "Select environment:",
+    ["Toilet", "Restaurant", "Mall", "Classroom"],
+    index=0
+)
 
-if not available_files:
-    st.sidebar.warning("No CSV files found in src/outputs. Run simulator first.")
+# Required base files
+ammonia_file = os.path.join(output_dir, "ammonia.csv")
+
+# Location-specific people counter file
+pc_file = os.path.join(output_dir, f"people_counter_{location.lower()}.csv")
+
+# Generate Data
+st.sidebar.markdown("Data Generation")
+if st.sidebar.button(f"Generate data for {location}"):
+    with st.spinner(f"Running simulator for {location}..."):
+        from simulator import Simulator  # simulator now in root
+        sim = Simulator(duration_minutes=1440)
+        sim.run_all(["ammonia", f"people_counter_{location.lower()}"])
+    st.sidebar.success(f"Generated simulation data for {location}")
+
+# Load Data
+if not (os.path.exists(ammonia_file) and os.path.exists(pc_file)):
+    st.sidebar.warning(f"No data found for {location}")
     st.stop()
 
-selected_file = st.sidebar.selectbox("Select dataset", available_files)
-file_path = os.path.join(output_dir, selected_file)
+# Load both datasets
+df_ammonia = pd.read_csv(ammonia_file)
+df_pc = pd.read_csv(pc_file)
 
-# Read and clean data
-df = pd.read_csv(file_path)
-df["timestamp"] = pd.to_datetime(df["timestamp"])
+# Convert timestamps
+df_ammonia["timestamp"] = pd.to_datetime(df_ammonia["timestamp"])
+df_pc["timestamp"] = pd.to_datetime(df_pc["timestamp"])
+
+# Merge both datasets
+df = pd.concat([df_ammonia, df_pc], ignore_index=True)
 df.sort_values("timestamp", inplace=True)
+
+st.sidebar.success(f"Loaded data for {location} environment.")
 
 # Sensor selection (if multiple types exist)
 sensor_types = sorted(df["sensor_type"].dropna().unique())
 selected_sensors = st.sidebar.multiselect("Select sensors", sensor_types, default=sensor_types)
-
-# # Date filter
-# min_date = pd.to_datetime(df["timestamp"].min()).to_pydatetime()
-# max_date = pd.to_datetime(df["timestamp"].max()).to_pydatetime()
-
-# date_range = st.sidebar.slider(
-#     "Select time range",
-#     min_value=min_date,
-#     max_value=max_date,
-#     value=(min_date, max_date),
-#     format="YYYY-MM-DD HH:mm"
-# )
-
-# # Filter dataframe
-# df = df[(df["timestamp"] >= date_range[0]) & (df["timestamp"] <= date_range[1])]
 
 # Define discrete periods and their hour ranges
 period_labels = ["Night", "Morning", "Afternoon", "Evening"]
@@ -58,7 +71,7 @@ period_ranges = {
 
 # Range select with textual labels (no numeric ticks)
 start_label, end_label = st.sidebar.select_slider(
-    "Choose consecutive period(s)",
+    "Select time period(s)",
     options=period_labels,
     value=("Morning", "Morning"),   # default = Morning only
 )

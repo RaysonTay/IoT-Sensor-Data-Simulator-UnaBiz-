@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from base_sensor import BaseSensor
+from src.base_sensor import BaseSensor
 
 class AmmoniaSensor(BaseSensor):
     def __init__(self, devEUI=None, battery=100, seqNumber=0,

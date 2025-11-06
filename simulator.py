@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime
-from sensors.ammonia_sensor import AmmoniaSensor
-from sensors.people_counter import PeopleCounterSensor
+from src.sensors.ammonia_sensor import AmmoniaSensor
+from src.sensors.people_counter import PeopleCounterSensor
 import os
 
 class Simulator:
