@@ -6,6 +6,7 @@ from base_sensor import BaseSensor
 class AmmoniaSensor(BaseSensor):
     def __init__(self, devEUI=None, battery=100, seqNumber=0,
                  frequency=300, noise_level=0.01, anomaly_rate=0.01, seed=None):
+        
         super().__init__(
             type="ammonia",
             devEUI=devEUI,
@@ -20,7 +21,7 @@ class AmmoniaSensor(BaseSensor):
         self.base_nh3 = 0.1
         self.nh3_amp = 0.05
 
-        # --- Markov parameters ---
+        # markov parameters
         self.temp_tau = 90.0      # min, larger = slower changes
         self.temp_sigma = 0.05
         self.temp_max_step = 0.3
@@ -32,9 +33,6 @@ class AmmoniaSensor(BaseSensor):
         self._temp_state = None
         self._hum_state = None
 
-    # -------------------------------------------------
-    # Time-of-day target functions
-    # -------------------------------------------------
     def _time_period(self, hour):
         if 6 <= hour < 12: return "morning"
         if 12 <= hour < 18: return "afternoon"
@@ -59,9 +57,7 @@ class AmmoniaSensor(BaseSensor):
         }
         return targets[self._time_period(hour)]
 
-    # -------------------------------------------------
-    # Mean-reverting (Ornstein–Uhlenbeck-like) step
-    # -------------------------------------------------
+    # for markovian property
     def _ou_step(self, prev, target, dt_min, tau, sigma, max_step):
         drift = (target - prev) * (dt_min / tau)
         noise = np.random.normal(0, sigma)
@@ -69,13 +65,11 @@ class AmmoniaSensor(BaseSensor):
         delta = np.clip(proposed - prev, -max_step, max_step)
         return prev + delta
 
-    # -------------------------------------------------
     def _init_env_state(self, start_time):
         h = start_time.hour
         self._temp_state = self._target_temp(h) + np.random.normal(0, 0.2)
         self._hum_state = self._target_hum(h) + np.random.normal(0, 1.0)
 
-    # -------------------------------------------------
     def _update_env(self, ts):
         dt_min = self.frequency / 60.0
         h = ts.hour
@@ -94,7 +88,6 @@ class AmmoniaSensor(BaseSensor):
         h = float(np.clip(self._hum_state, 20, 95))
         return round(t, 1), round(h, 1)
 
-    # -------------------------------------------------
     def generate_reading(self, t):
         base = self.base_nh3 + self.nh3_amp * np.sin(t / 96)
         noise = np.random.normal(0, self.noise_level)
@@ -105,13 +98,12 @@ class AmmoniaSensor(BaseSensor):
             temp_dev = self._temp_state - 28    # baseline ~28°C
             hum_dev = self._hum_state - 50      # baseline ~50% RH
 
-            # slight positive correlation (higher temp & humidity -> higher NH3)
+            # slight positive correlation
             nh3_value *= (1 + 0.005 * temp_dev + 0.002 * hum_dev)
 
         nh3_value = max(0.05, nh3_value)
         return round(nh3_value, 3)
 
-    # -------------------------------------------------
     def generate_data(self, duration_minutes=1440, start_time=None):
         if start_time is None:
             start_time = datetime.now()
