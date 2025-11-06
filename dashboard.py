@@ -36,6 +36,7 @@ if st.sidebar.button(f"Generate data for {location}"):
         sim = Simulator(duration_minutes=1440)
         sim.run_all(["ammonia", f"people_counter_{location.lower()}"])
     st.sidebar.success(f"Generated simulation data for {location}")
+    st.rerun()
 
 # Load Data
 if not (os.path.exists(ammonia_file) and os.path.exists(pc_file)):
@@ -159,9 +160,25 @@ with tab2:
     pc_df = df[df["sensor_type"].str.contains("people_counter", na=False)]
 
     if not pc_df.empty:
-        col1, col2 = st.columns(2)
-        col1.metric("Average Inflow", int(pc_df["period_in"].mean()))
-        col2.metric("Average Outflow", int(pc_df["period_out"].mean()))
+        pc_df["period_in"] = pd.to_numeric(pc_df["period_in"], errors="coerce")
+        pc_df["period_out"] = pd.to_numeric(pc_df["period_out"], errors="coerce")
+        if "current_occupancy" in pc_df.columns:
+            pc_df["current_occupancy"] = pd.to_numeric(pc_df["current_occupancy"], errors="coerce")
+
+        # Calculate metrics safely
+        avg_in = pc_df["period_in"].dropna().mean()
+        avg_out = pc_df["period_out"].dropna().mean()
+        max_occupancy = (
+            pc_df["current_occupancy"].max()
+            if "current_occupancy" in pc_df.columns else None
+        )
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Average Inflow", f"{avg_in:.1f}")
+        col2.metric("Average Outflow", f"{avg_out:.1f}")
+        if max_occupancy is not None:
+            col3.metric("Max Occupancy", int(max_occupancy))
+        else:
+            col3.metric("Max Occupancy", "—")
 
         fig_inout = px.bar(pc_df, x="timestamp", y=["period_in", "period_out"],
                            title="People Flow (In/Out)", barmode="group")

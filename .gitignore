@@ -1,4 +1,6 @@
 # ignore generated outputs
 outputs/
+src/outputs/
 __pycache__/
 *.pyc
+*.csv
